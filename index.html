@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <title>WS2812 灯带控制</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: linear-gradient(145deg,#0f172a,#111827 55%,#172554); color: #f8fafc; font-family: system-ui,-apple-system,sans-serif; }
+    .card { width: min(92%,480px); margin: 4vh auto; padding: 24px; border: 1px solid #ffffff18; border-radius: 24px; background: #0f172acc; box-shadow: 0 24px 70px #0008; backdrop-filter: blur(12px); }
+    h1 { font-size: 25px; margin: 0 0 6px; }
+    .sub { color: #94a3b8; margin: 0 0 22px; }
+    .top { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+    .power { width: 76px; height: 42px; border: 0; border-radius: 22px; background: #334155; color: #fff; font-weight: 800; }
+    .power.on { background: #22c55e; color: #052e16; box-shadow: 0 0 28px #22c55e66; }
+    .preview { height: 74px; border-radius: 16px; margin: 18px 0; border: 1px solid #ffffff22; transition: .2s; box-shadow: inset 0 0 22px #0005; }
+    label { display: flex; justify-content: space-between; align-items: center; margin: 17px 0 7px; font-weight: 650; }
+    .value { color: #93c5fd; font-variant-numeric: tabular-nums; }
+    .value.warn { color: #fbbf24; }
+    input[type=color] { width: 100%; height: 52px; padding: 4px; border: 1px solid #475569; border-radius: 12px; background: #1e293b; }
+    input[type=range] { width: 100%; accent-color: #60a5fa; }
+    .hue-range { height: 38px; appearance: none; border: 1px solid #ffffff44; border-radius: 12px; padding: 0; background: linear-gradient(90deg,#ff0000 0%,#ffff00 17%,#00ff00 33%,#00ffff 50%,#0000ff 67%,#ff00ff 83%,#ff0000 100%); }
+    .hue-range::-webkit-slider-thumb { appearance: none; width: 27px; height: 27px; border: 3px solid #fff; border-radius: 50%; background: #111827; box-shadow: 0 1px 8px #000b; }
+    .hue-range::-moz-range-thumb { width: 21px; height: 21px; border: 3px solid #fff; border-radius: 50%; background: #111827; box-shadow: 0 1px 8px #000b; }
+    .hint { margin-top: 6px; color: #94a3b8; font-size: 12px; }
+    select,input[type=password] { width: 100%; height: 46px; border: 1px solid #475569; border-radius: 12px; padding: 0 12px; background: #1e293b; color: #fff; font-size: 16px; }
+    .colors { display: grid; grid-template-columns: repeat(6,1fr); gap: 9px; margin-top: 11px; }
+    .dot { aspect-ratio: 1; border-radius: 50%; border: 2px solid #ffffff88; box-shadow: 0 4px 14px #0007; }
+    .apply { width: 100%; height: 50px; margin-top: 22px; border: 0; border-radius: 13px; background: #3b82f6; color: #fff; font-size: 17px; font-weight: 800; }
+    .apply:active { transform: scale(.98); }
+    .status { min-height: 22px; margin: 14px 0 0; text-align: center; color: #94a3b8; font-size: 14px; }
+    .ok { color: #86efac; }
+    .err { color: #fca5a5; }
+    .foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 18px; font-size: 13px; }
+    .foot a { color: #93c5fd; }
+    .pill { color: #cbd5e1; background: #1e293b; padding: 5px 9px; border-radius: 99px; }
+    .remote { margin-top: 18px; padding: 15px; border: 1px solid #ffffff18; border-radius: 15px; background: #111827aa; }
+    .remote[hidden] { display: none; }
+    .remote button { width: 100%; height: 45px; margin-top: 13px; border: 0; border-radius: 11px; background: #0ea5e9; color: #fff; font-weight: 800; font-size: 15px; }
+    .check { justify-content: flex-start; gap: 9px; color: #cbd5e1; font-size: 13px; font-weight: 500; }
+    .check input { width: 18px; height: 18px; }
+    .pairing { text-align: center; }
+    .pairing p { color: #cbd5e1; line-height: 1.6; }
+    #qrcode { width: max-content; margin: 20px auto; padding: 12px; border-radius: 14px; background: #fff; }
+    #qrcode img { display: block; }
+  </style>
+</head>
+<body>
+  <main id="controller" class="card">
+    <div class="top">
+      <div><h1>WS2812 灯带</h1><p class="sub">手机局域网控制面板</p></div>
+      <button id="power" class="power">关</button>
+    </div>
+    <div id="preview" class="preview"></div>
+    <label>颜色 <span id="hex" class="value">#FF5010</span></label>
+    <input id="color" type="color" value="#ff5010">
+    <label>彩虹色带 <span id="huev" class="value">15°</span></label>
+    <input id="hue" class="hue-range" type="range" min="0" max="359" value="15">
+    <div class="hint">拖动色带选择完整色相；上方取色器可选浅色和低饱和颜色</div>
+    <label>亮度 <span id="bv" class="value">38%</span></label>
+    <input id="brightness" type="range" min="0" max="255" value="96">
+    <label>效果</label>
+    <select id="effect">
+      <option value="static">常亮</option>
+      <option value="rainbow">彩虹流动</option>
+      <option value="chase">追逐</option>
+      <option value="breathe">呼吸</option>
+      <option value="meteor">流星</option>
+      <option value="twinkle">星空闪烁</option>
+      <option value="fire">火焰</option>
+      <option value="ocean">海浪</option>
+      <option value="dual_gradient">双色渐变（互补色）</option>
+      <option value="collision">双向碰撞</option>
+    </select>
+    <label>速度 <span id="sv" class="value">80 ms</span></label>
+    <input id="speed" type="range" min="20" max="500" step="10" value="80">
+    <button id="apply" class="apply">应用到灯带</button>
+    <div id="status" class="status">正在读取设备状态…</div>
+    <label>控制通道</label>
+    <select id="transport">
+      <option value="local">本地 Wi-Fi</option>
+      <option value="cloud">EMQX 跨网</option>
+    </select>
+    <section id="remote" class="remote" hidden>
+      <div class="hint">WSS：ie1f9c8f.ala.cn-hangzhou.emqxsl.cn:8084<br>网页用户：ws2812_web</div>
+      <label for="cloudPassword">网页 MQTT 密码</label>
+      <input id="cloudPassword" type="password" maxlength="127" autocomplete="current-password" placeholder="输入 ws2812_web 的密码">
+      <label class="check"><input id="rememberPassword" type="checkbox">仅在本机浏览器保存密码</label>
+      <button id="cloudConnect">连接 EMQX</button>
+      <div id="cloudStatus" class="status">尚未连接</div>
+    </section>
+    <div class="foot"><a id="setupLink" href="/setup">Wi-Fi 配网</a><span id="device" class="pill">ESP32-C3</span></div>
+  </main>
+  <main id="pairing" class="card pairing" hidden>
+    <h1>手机远程控制配对</h1>
+    <p>请用手机相机扫描二维码。凭据只会进入手机浏览器本地存储，不会上传到网页托管服务器。</p>
+    <div id="qrcode"></div>
+    <div id="pairStatus" class="status">正在生成安全配对二维码…</div>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id);
+    let power = false;
+    let timer = 0;
+    let mqttClient = null;
+    let cloudConnected = false;
+    const mqttTopics = {
+      set: 'ws2812/1463939126f4/set',
+      state: 'ws2812/1463939126f4/state',
+      online: 'ws2812/1463939126f4/online'
+    };
+
+    function isDeviceHost() {
+      const host = location.hostname;
+      return host === 'localhost' || host === '127.0.0.1' ||
+        host === '192.168.4.1' || /^192\.168\./.test(host) ||
+        /^10\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+    }
+
+    function rgb() {
+      const h = $('color').value;
+      return {r: parseInt(h.slice(1,3),16), g: parseInt(h.slice(3,5),16), b: parseInt(h.slice(5,7),16)};
+    }
+    function hsvHex(h, s=1, v=1) {
+      const c = v*s, x = c*(1-Math.abs((h/60)%2-1)), m = v-c;
+      let r=0,g=0,b=0;
+      if (h<60) { r=c; g=x; } else if (h<120) { r=x; g=c; }
+      else if (h<180) { g=c; b=x; } else if (h<240) { g=x; b=c; }
+      else if (h<300) { r=x; b=c; } else { r=c; b=x; }
+      return '#'+[r,g,b].map(n=>Math.round((n+m)*255).toString(16).padStart(2,'0')).join('');
+    }
+    function hueFromHex(hex) {
+      const r=parseInt(hex.slice(1,3),16)/255, g=parseInt(hex.slice(3,5),16)/255, b=parseInt(hex.slice(5,7),16)/255;
+      const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min;
+      if (!d) return 0;
+      let h;
+      if (max===r) h=60*(((g-b)/d)%6); else if (max===g) h=60*((b-r)/d+2); else h=60*((r-g)/d+4);
+      return Math.round(h<0?h+360:h);
+    }
+    function paint() {
+      const c = $('color').value;
+      const brightnessPercent = Math.round($('brightness').value*100/255);
+      const a = power ? Math.max(.08,$('brightness').value/255) : .03;
+      $('preview').style.background = c;
+      $('preview').style.opacity = a;
+      $('preview').style.boxShadow = power ? '0 0 35px '+c+'99,inset 0 0 18px #fff3' : 'inset 0 0 22px #0008';
+      $('hex').textContent = c.toUpperCase();
+      $('huev').textContent = $('hue').value+'°';
+      $('bv').textContent = brightnessPercent+'%'+(brightnessPercent<=10?' · 很暗':'');
+      $('bv').classList.toggle('warn',brightnessPercent<=10);
+      $('sv').textContent = $('speed').value+' ms';
+      $('power').textContent = power ? '开' : '关';
+      $('power').classList.toggle('on',power);
+    }
+    function msg(text, cls='') {
+      const e = $('status');
+      e.textContent = text;
+      e.className = 'status '+cls;
+    }
+    function cloudMsg(text, cls='') {
+      const e = $('cloudStatus');
+      e.textContent = text;
+      e.className = 'status '+cls;
+    }
+    function currentState() {
+      const c = rgb();
+      return {power,r:c.r,g:c.g,b:c.b,brightness:Number($('brightness').value),effect:$('effect').value,speed:Number($('speed').value)};
+    }
+    function syncForm(data) {
+      power = Boolean(data.power);
+      $('color').value = '#'+[data.r,data.g,data.b].map(x=>Number(x).toString(16).padStart(2,'0')).join('');
+      $('hue').value = hueFromHex($('color').value);
+      $('brightness').value = data.brightness;
+      $('effect').value = data.effect;
+      $('speed').value = data.speed;
+      paint();
+    }
+    function ensureMqttLibrary() {
+      if (window.mqtt) return Promise.resolve();
+      return new Promise((resolve,reject) => {
+        const existing = document.getElementById('mqttJs');
+        if (existing) { existing.addEventListener('load',resolve,{once:true}); existing.addEventListener('error',()=>reject(Error('MQTT 网页组件加载失败')),{once:true}); return; }
+        const script = document.createElement('script');
+        script.id = 'mqttJs';
+        script.src = 'https://cdn.jsdelivr.net/npm/mqtt@5.10.4/dist/mqtt.min.js';
+        script.onload = resolve;
+        script.onerror = () => reject(Error('MQTT 网页组件加载失败'));
+        document.head.appendChild(script);
+      });
+    }
+    function ensureQrLibrary() {
+      if (window.QRCode) return Promise.resolve();
+      return new Promise((resolve,reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
+        script.onload = resolve;
+        script.onerror = () => reject(Error('二维码组件加载失败'));
+        document.head.appendChild(script);
+      });
+    }
+    async function handlePairingHash() {
+      const params = new URLSearchParams(location.hash.slice(1));
+      const pairPassword = params.get('pair');
+      if (pairPassword) {
+        const target = location.origin + location.pathname + location.search +
+          '#p=' + encodeURIComponent(pairPassword);
+        history.replaceState(null,'',location.pathname+location.search+'#pairing');
+        $('controller').hidden = true;
+        $('pairing').hidden = false;
+        try {
+          await ensureQrLibrary();
+          new QRCode($('qrcode'),{text:target,width:240,height:240,colorDark:'#020617',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+          $('pairStatus').textContent = '二维码已就绪 · 扫码后手机会自动连接';
+          $('pairStatus').className = 'status ok';
+        } catch (e) {
+          $('pairStatus').textContent = e.message;
+          $('pairStatus').className = 'status err';
+        }
+        return 'pairing';
+      }
+
+      const pairedPassword = params.get('p');
+      if (pairedPassword) {
+        $('cloudPassword').value = pairedPassword;
+        $('rememberPassword').checked = true;
+        localStorage.setItem('ws2812_web_password',pairedPassword);
+        history.replaceState(null,'',location.pathname+location.search);
+        return 'paired';
+      }
+      return '';
+    }
+    async function connectCloud() {
+      const password = $('cloudPassword').value;
+      if (password.length < 8) { cloudMsg('请输入网页用户密码','err'); return; }
+      cloudMsg('正在连接 EMQX…');
+      try {
+        await ensureMqttLibrary();
+        if (mqttClient) mqttClient.end(true);
+        if ($('rememberPassword').checked) localStorage.setItem('ws2812_web_password',password);
+        else localStorage.removeItem('ws2812_web_password');
+        const clientId = 'ws2812-web-'+Math.random().toString(16).slice(2,10);
+        mqttClient = mqtt.connect('wss://ie1f9c8f.ala.cn-hangzhou.emqxsl.cn:8084/mqtt',{
+          username:'ws2812_web',password,clientId,clean:true,connectTimeout:10000,reconnectPeriod:3000,protocolVersion:4
+        });
+        mqttClient.on('connect',() => {
+          cloudConnected = true;
+          mqttClient.subscribe([mqttTopics.state,mqttTopics.online],{qos:1},err => cloudMsg(err?'订阅失败：'+err.message:'EMQX 已连接，等待设备状态',err?'err':'ok'));
+        });
+        mqttClient.on('reconnect',() => { cloudConnected=false; cloudMsg('正在重新连接 EMQX…'); });
+        mqttClient.on('close',() => { cloudConnected=false; cloudMsg('EMQX 连接已断开'); });
+        mqttClient.on('error',err => cloudMsg('EMQX 错误：'+err.message,'err'));
+        mqttClient.on('message',(topic,payload) => {
+          try {
+            const data = JSON.parse(payload.toString());
+            if (topic===mqttTopics.state) { syncForm(data); msg('已收到远程状态','ok'); }
+            if (topic===mqttTopics.online) cloudMsg(data.online?'EMQX 已连接 · 灯带在线':'EMQX 已连接 · 灯带离线',data.online?'ok':'err');
+          } catch (e) { cloudMsg('收到无法解析的状态消息','err'); }
+        });
+      } catch (e) {
+        cloudMsg(e.message,'err');
+      }
+    }
+    async function apply() {
+      clearTimeout(timer);
+      const c = rgb();
+      msg('正在发送…');
+      try {
+        if ($('transport').value === 'cloud') {
+          if (!cloudConnected || !mqttClient) throw Error('请先连接 EMQX');
+          await new Promise((resolve,reject) => mqttClient.publish(mqttTopics.set,JSON.stringify(currentState()),{qos:1,retain:false},err=>err?reject(err):resolve()));
+          msg('已通过 EMQX 发送','ok');
+        } else {
+          const body = new URLSearchParams({power:power?'1':'0',r:c.r,g:c.g,b:c.b,brightness:$('brightness').value,effect:$('effect').value,speed:$('speed').value});
+          const response = await fetch('/api/led',{method:'POST',body});
+          const data = await response.json();
+          if (!response.ok) throw Error(data.message||'控制失败');
+          msg('已同步到灯带','ok');
+        }
+      } catch (e) {
+        msg('连接失败：'+e.message,'err');
+      }
+    }
+    function later() {
+      paint();
+      clearTimeout(timer);
+      timer = setTimeout(apply,160);
+    }
+
+    $('power').onclick = () => { power=!power; later(); };
+    $('apply').onclick = apply;
+    $('color').oninput = () => { $('hue').value=hueFromHex($('color').value); later(); };
+    $('hue').oninput = () => { $('color').value=hsvHex(Number($('hue').value)); later(); };
+    $('brightness').oninput = later;
+    $('effect').onchange = later;
+    $('speed').oninput = later;
+    $('cloudConnect').onclick = connectCloud;
+    $('transport').onchange = () => {
+      const cloud = $('transport').value === 'cloud';
+      $('remote').hidden = !cloud;
+      msg(cloud?'跨网模式：请连接 EMQX':'本地 Wi-Fi 模式');
+    };
+    async function load() {
+      try {
+        const response = await fetch('/api/led',{cache:'no-store'});
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw Error(data.message||'本地控制接口不可用');
+        syncForm(data);
+        $('device').textContent = data.count+' 颗 · GPIO'+data.gpio;
+        msg('控制器已连接','ok');
+      } catch (e) {
+        paint();
+        msg('读取失败：'+e.message,'err');
+      }
+    }
+    (async () => {
+      const pairingMode = await handlePairingHash();
+      if (pairingMode === 'pairing') return;
+
+      const savedPassword = localStorage.getItem('ws2812_web_password');
+      if (savedPassword && !$('cloudPassword').value) $('cloudPassword').value=savedPassword;
+      if (savedPassword) $('rememberPassword').checked=true;
+
+      const publicPage = !isDeviceHost();
+      if (publicPage || pairingMode === 'paired') {
+        $('transport').value = 'cloud';
+        $('remote').hidden = false;
+        $('setupLink').href = 'http://192.168.4.1/setup';
+        $('setupLink').target = '_blank';
+        paint();
+        msg('跨网模式：正在准备 EMQX');
+        if ($('cloudPassword').value) setTimeout(connectCloud,200);
+      } else {
+        load();
+      }
+    })();
+  </script>
+</body>
+</html>
