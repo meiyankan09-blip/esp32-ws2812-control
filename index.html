@@ -83,9 +83,9 @@
       <option value="cloud">EMQX 跨网</option>
     </select>
     <section id="remote" class="remote" hidden>
-      <div class="hint">WSS：ie1f9c8f.ala.cn-hangzhou.emqxsl.cn:8084<br>网页用户：ws2812_web</div>
+      <div class="hint">WSS：ie1f9c8f.ala.cn-hangzhou.emqxsl.cn:8084<br>网页用户：ws2812_pages</div>
       <label for="cloudPassword">网页 MQTT 密码</label>
-      <input id="cloudPassword" type="password" maxlength="127" autocomplete="current-password" placeholder="输入 ws2812_web 的密码">
+      <input id="cloudPassword" type="password" maxlength="127" autocomplete="current-password" placeholder="输入 ws2812_pages 的密码">
       <label class="check"><input id="rememberPassword" type="checkbox">仅在本机浏览器保存密码</label>
       <button id="cloudConnect">连接 EMQX</button>
       <div id="cloudStatus" class="status">尚未连接</div>
@@ -223,7 +223,7 @@
       if (pairedPassword) {
         $('cloudPassword').value = pairedPassword;
         $('rememberPassword').checked = true;
-        localStorage.setItem('ws2812_web_password',pairedPassword);
+        localStorage.setItem('ws2812_pages_password',pairedPassword);
         history.replaceState(null,'',location.pathname+location.search);
         return 'paired';
       }
@@ -236,11 +236,11 @@
       try {
         await ensureMqttLibrary();
         if (mqttClient) mqttClient.end(true);
-        if ($('rememberPassword').checked) localStorage.setItem('ws2812_web_password',password);
-        else localStorage.removeItem('ws2812_web_password');
+        if ($('rememberPassword').checked) localStorage.setItem('ws2812_pages_password',password);
+        else localStorage.removeItem('ws2812_pages_password');
         const clientId = 'ws2812-web-'+Math.random().toString(16).slice(2,10);
         mqttClient = mqtt.connect('wss://ie1f9c8f.ala.cn-hangzhou.emqxsl.cn:8084/mqtt',{
-          username:'ws2812_web',password,clientId,clean:true,connectTimeout:10000,reconnectPeriod:3000,protocolVersion:4
+          username:'ws2812_pages',password,clientId,clean:true,connectTimeout:10000,reconnectPeriod:3000,protocolVersion:4
         });
         mqttClient.on('connect',() => {
           cloudConnected = true;
@@ -316,7 +316,7 @@
       const pairingMode = await handlePairingHash();
       if (pairingMode === 'pairing') return;
 
-      const savedPassword = localStorage.getItem('ws2812_web_password');
+      const savedPassword = localStorage.getItem('ws2812_pages_password');
       if (savedPassword && !$('cloudPassword').value) $('cloudPassword').value=savedPassword;
       if (savedPassword) $('rememberPassword').checked=true;
 
