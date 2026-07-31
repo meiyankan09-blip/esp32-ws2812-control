@@ -44,6 +44,11 @@
     .pairing p { color: #cbd5e1; line-height: 1.6; }
     #qrcode { width: max-content; margin: 20px auto; padding: 12px; border-radius: 14px; background: #fff; }
     #qrcode img { display: block; }
+    .mic { margin-top: 13px; padding: 13px; border: 1px solid #ffffff18; border-radius: 13px; background: #111827aa; }
+    .mic[hidden] { display: none; }
+    .mic-head { display: flex; justify-content: space-between; gap: 10px; color: #cbd5e1; font-size: 13px; }
+    .meter { height: 12px; margin-top: 9px; overflow: hidden; border-radius: 99px; background: #020617; }
+    .meter span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#22c55e 0%,#eab308 65%,#ef4444 100%); transition: width .08s linear; }
   </style>
 </head>
 <body>
@@ -72,7 +77,13 @@
       <option value="ocean">海浪</option>
       <option value="dual_gradient">双色渐变（互补色）</option>
       <option value="collision">双向碰撞</option>
+      <option value="music">音乐律动（INMP441）</option>
     </select>
+    <section id="micPanel" class="mic" hidden>
+      <div class="mic-head"><span id="micStatus">等待麦克风数据</span><span id="micValue">0%</span></div>
+      <div class="meter"><span id="micFill"></span></div>
+      <div class="hint">声音只在 ESP32-C3 本地处理，不会上传录音</div>
+    </section>
     <label>速度 <span id="sv" class="value">80 ms</span></label>
     <input id="speed" type="range" min="20" max="500" step="10" value="80">
     <button id="apply" class="apply">应用到灯带</button>
@@ -148,7 +159,9 @@
       $('huev').textContent = $('hue').value+'°';
       $('bv').textContent = brightnessPercent+'%'+(brightnessPercent<=10?' · 很暗':'');
       $('bv').classList.toggle('warn',brightnessPercent<=10);
-      $('sv').textContent = $('speed').value+' ms';
+      const musicMode = $('effect').value === 'music';
+      $('micPanel').hidden = !musicMode;
+      $('sv').textContent = $('speed').value+' ms'+(musicMode?' · 彩虹速度':'');
       $('power').textContent = power ? '开' : '关';
       $('power').classList.toggle('on',power);
     }
@@ -161,6 +174,34 @@
       const e = $('cloudStatus');
       e.textContent = text;
       e.className = 'status '+cls;
+    }
+    async function pollMicrophone() {
+      const active = $('effect').value === 'music';
+      if (active) {
+        if ($('transport').value === 'local' && isDeviceHost()) {
+          try {
+            const response = await fetch('/api/audio',{cache:'no-store'});
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw Error('接口不可用');
+            const percent = Math.round(Number(data.level||0)*100/255);
+            $('micFill').style.width = percent+'%';
+            $('micValue').textContent = percent+'%';
+            $('micStatus').textContent = !data.enabled ? '麦克风已禁用'
+              : !data.initialized ? '麦克风初始化失败'
+              : !data.calibrated ? '正在校准环境底噪…'
+              : 'INMP441 实时输入';
+          } catch (e) {
+            $('micFill').style.width = '0';
+            $('micValue').textContent = '—';
+            $('micStatus').textContent = '无法读取麦克风状态';
+          }
+        } else {
+          $('micFill').style.width = '0';
+          $('micValue').textContent = '设备端';
+          $('micStatus').textContent = '跨网控制已启用，音频在灯带端处理';
+        }
+      }
+      setTimeout(pollMicrophone,250);
     }
     function currentState() {
       const c = rgb();
@@ -319,6 +360,8 @@
       const savedPassword = localStorage.getItem('ws2812_pages_password');
       if (savedPassword && !$('cloudPassword').value) $('cloudPassword').value=savedPassword;
       if (savedPassword) $('rememberPassword').checked=true;
+
+      pollMicrophone();
 
       const publicPage = !isDeviceHost();
       if (publicPage || pairingMode === 'paired') {
