@@ -78,13 +78,13 @@
       <option value="dual_gradient">双色渐变（互补色）</option>
       <option value="collision">双向碰撞</option>
       <option value="music">音乐律动（INMP441）</option>
+      <option value="music_reverse">音乐律动反向</option>
     </select>
     <section id="micPanel" class="mic" hidden>
       <div class="mic-head"><span id="micStatus">等待麦克风数据</span><span id="micValue">0%</span></div>
       <div class="meter"><span id="micFill"></span></div>
       <div class="hint">声音只在 ESP32-C3 本地处理，不会上传录音</div>
     </section>
-    <label class="check" hidden><input id="musicReverse" type="checkbox">律动反向（从右往左）</label>
     <label>速度 <span id="sv" class="value">80 ms</span></label>
     <input id="speed" type="range" min="20" max="500" step="10" value="80">
     <button id="apply" class="apply">应用到灯带</button>
@@ -160,9 +160,8 @@
       $('huev').textContent = $('hue').value+'°';
       $('bv').textContent = brightnessPercent+'%'+(brightnessPercent<=10?' · 很暗':'');
       $('bv').classList.toggle('warn',brightnessPercent<=10);
-      const musicMode = $('effect').value === 'music';
+      const musicMode = $('effect').value === 'music' || $('effect').value === 'music_reverse';
       $('micPanel').hidden = !musicMode;
-      $('musicReverse').closest('label').hidden = !musicMode;
       $('sv').textContent = $('speed').value+' ms'+(musicMode?' · 彩虹速度':'');
       $('power').textContent = power ? '开' : '关';
       $('power').classList.toggle('on',power);
@@ -207,11 +206,10 @@
     }
     function currentState() {
       const c = rgb();
-      return {power,musicReverse:$('musicReverse').checked,r:c.r,g:c.g,b:c.b,brightness:Number($('brightness').value),effect:$('effect').value,speed:Number($('speed').value)};
+      return {power,r:c.r,g:c.g,b:c.b,brightness:Number($('brightness').value),effect:$('effect').value,speed:Number($('speed').value)};
     }
     function syncForm(data) {
       power = Boolean(data.power);
-      if (data.musicReverse !== undefined) $('musicReverse').checked = Boolean(data.musicReverse);
       $('color').value = '#'+[data.r,data.g,data.b].map(x=>Number(x).toString(16).padStart(2,'0')).join('');
       $('hue').value = hueFromHex($('color').value);
       $('brightness').value = data.brightness;
@@ -314,7 +312,7 @@
           await new Promise((resolve,reject) => mqttClient.publish(mqttTopics.set,JSON.stringify(currentState()),{qos:1,retain:false},err=>err?reject(err):resolve()));
           msg('已通过 EMQX 发送','ok');
         } else {
-          const body = new URLSearchParams({power:power?'1':'0',musicReverse:$('musicReverse').checked?'1':'0',r:c.r,g:c.g,b:c.b,brightness:$('brightness').value,effect:$('effect').value,speed:$('speed').value});
+          const body = new URLSearchParams({power:power?'1':'0',r:c.r,g:c.g,b:c.b,brightness:$('brightness').value,effect:$('effect').value,speed:$('speed').value});
           const response = await fetch('/api/led',{method:'POST',body});
           const data = await response.json();
           if (!response.ok) throw Error(data.message||'控制失败');
