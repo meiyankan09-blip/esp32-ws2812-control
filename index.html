@@ -177,7 +177,8 @@
       e.className = 'status '+cls;
     }
     async function pollMicrophone() {
-      const active = $('effect').value === 'music';
+      const v = $('effect').value;
+      const active = v === 'music' || v === 'music_reverse';
       if (active) {
         if ($('transport').value === 'local' && isDeviceHost()) {
           try {
